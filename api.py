@@ -1,4 +1,4 @@
-from __future__ import print_function, unicode_literals
+from __future__ import print_function
 
 from urllib import urlencode
 
@@ -76,7 +76,7 @@ if __name__ == '__main__':
         reactor.stop()
 
     def error(fail):
-        fail. printDetailedTraceback()
+        fail.printDetailedTraceback()
         reactor.stop()
 
     request("GET", sys.argv[1]).addCallbacks(done, error)
