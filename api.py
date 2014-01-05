@@ -17,7 +17,7 @@ def request(method, url, **kwargs):
     if not oauth_tokens:
         raise ValueError("OAuth token is unavailable")
 
-    if "params" in kwargs:
+    if kwargs.get("params"):
         encoded_params = urlencode(kwargs["params"])
         url = "".join(url, "&" if "?" in url else "?", encoded_params)
         del kwargs["params"]
