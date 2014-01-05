@@ -15,7 +15,7 @@ __all__ = ["moefou", "moefm"]
 def request(method, url, **kwargs):
     oauth_tokens = settings.get("oauth_tokens")
     if not oauth_tokens:
-        raise ValueError("OAuth token is available")
+        raise ValueError("OAuth token is unavailable")
 
     if "params" in kwargs:
         encoded_params = urlencode(kwargs["params"])
