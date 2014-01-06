@@ -1,6 +1,7 @@
 from __future__ import print_function, unicode_literals
 
 import re
+from HTMLParser import HTMLParser
 
 from coherence.upnp.core import DIDLLite
 from coherence.upnp.core.DIDLLite import (
@@ -12,6 +13,8 @@ from coherence.backend import (
 
 import api
 
+_htmlparser = HTMLParser()
+
 
 class MoeFmPlaylistItem(BackendItem):
     logCategory = "moefm"
@@ -19,9 +22,9 @@ class MoeFmPlaylistItem(BackendItem):
     def __init__(self, item_data):
         BackendItem.__init__(self)
         self.item_data = item_data
-        self.name = item_data["title"]
-        self.title = item_data["title"]
-        self.artist = item_data["artist"]
+        self.name = _htmlparser.unescape(item_data["title"])
+        self.title = _htmlparser.unescape(item_data["title"])
+        self.artist = _htmlparser.unescape(item_data["artist"])
         self.album = item_data["sub_title"]
         self.cover = item_data["cover"]["large"]
         self.duration = item_data["stream_time"]
