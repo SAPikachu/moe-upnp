@@ -3,7 +3,9 @@ from __future__ import print_function, unicode_literals
 import re
 from HTMLParser import HTMLParser
 
+from coherence import log
 from coherence.upnp.core import DIDLLite
+from coherence.upnp.core.utils import ReverseProxyUriResource
 from coherence.upnp.core.DIDLLite import (
     Resource,
 )
@@ -15,6 +17,18 @@ import api
 import settings
 
 _htmlparser = HTMLParser()
+
+
+class MoeFMProxyStream(ReverseProxyUriResource, log.Loggable):
+    logCategory = 'moefm_stream'
+
+    def __init__(self, uri, parent):
+        self.parent = parent
+        ReverseProxyUriResource.__init__(self, uri.encode("utf-8"))
+
+    def render(self, request):
+        self.debug("render %r", self.parent.item_data)
+        return ReverseProxyUriResource.render(self, request)
 
 
 class MoeFmPlaylistItem(BackendItem):
@@ -52,11 +66,16 @@ class MoeFmPlaylistItem(BackendItem):
             item.albumArtURI = self.cover
             item.duration = self.duration
 
+            proxied_url = "%s%s" % (self.store.urlbase, self.get_id())
+            proxied_url = proxied_url.encode("utf-8")
+            self.url = proxied_url
+            self.location = MoeFMProxyStream(self.item_data["url"], self)
+
             protocol = "http-get"
 
             res = Resource(
-                self.item_data["url"],
-                "%s:*:%s:*" % (protocol, self.mimetype)
+                proxied_url,
+                ("%s:*:%s:*" % (protocol, self.mimetype)).encode("utf-8")
             )
             res.size = self.item_data["file_size"] * 1024
             res.duration = self.duration
