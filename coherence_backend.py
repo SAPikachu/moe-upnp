@@ -70,6 +70,17 @@ class MoeFmPlaylistItem(BackendItem):
         return self.url
 
 
+class PlaylistBackendContainer(Container):
+    def get_item(self):
+        if self.item is None:
+            self.item = DIDLLite.PlaylistContainer(
+                self.storage_id, self.parent_id, self.name
+            )
+
+        self.item.childCount = self.get_child_count()
+        return self.item
+
+
 class MoeFmPlaylistStore(AbstractBackendStore):
     logCategory = "moefm"
     name = "Moe FM"
@@ -95,7 +106,7 @@ class MoeFmPlaylistStore(AbstractBackendStore):
 
         root_item = Container(None, "Moe FM")
         self.set_root_item(root_item)
-        playlist_item = Container(root_item, "Start listening")
+        playlist_item = PlaylistBackendContainer(root_item, "Start listening")
         root_item.add_child(playlist_item)
         self.load_playlist(playlist_item)
 
