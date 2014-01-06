@@ -19,7 +19,7 @@ def request(method, url, **kwargs):
 
     if kwargs.get("params"):
         encoded_params = urlencode(kwargs["params"])
-        url = "".join(url, "&" if "?" in url else "?", encoded_params)
+        url = "".join([url, "&" if "?" in url else "?", encoded_params])
         del kwargs["params"]
 
     client = oauth1.Client(
