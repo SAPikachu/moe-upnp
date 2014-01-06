@@ -12,6 +12,7 @@ from coherence.backend import (
 )
 
 import api
+import settings
 
 _htmlparser = HTMLParser()
 
@@ -119,7 +120,10 @@ class MoeFmPlaylistStore(AbstractBackendStore):
             print("Error: %s" % error)
             return None
 
-        d = api.moefm.get("/listen/playlist?api=json")
+        d = api.moefm.get(
+            "/listen/playlist?api=json",
+            {"perpage": settings.get("tracks_per_request", 2)}
+        )
         d.addCallback(got_response)
         d.addErrback(got_error)
         return d
