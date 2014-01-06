@@ -42,7 +42,8 @@ class MoeFmPlaylistItem(BackendItem):
         if self.item is None:
             upnp_id = self.get_id()
             upnp_parent_id = self.parent.get_id()
-            item = DIDLLite.AudioItem(upnp_id, upnp_parent_id, self.name)
+            item = DIDLLite.MusicTrack(upnp_id, upnp_parent_id, self.name)
+            item.restricted = True
             item.name = self.name
             item.title = self.title
             item.artist = self.artist
