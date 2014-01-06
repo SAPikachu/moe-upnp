@@ -1,4 +1,4 @@
-from __future__ import print_function
+from __future__ import print_function, unicode_literals
 
 import re
 
@@ -120,10 +120,10 @@ if __name__ == '__main__':
         Plugins().set("MoeFmPlaylistStore", MoeFmPlaylistStore)
         Coherence({
             "logging": {
-                "level": "info",
+                "level": "warn",
             },
-            "plugin": [{"backend": "MoeFmPlaylistStore"},
-        ]})
+            "plugin": [{"backend": "MoeFmPlaylistStore"}]
+        })
 
     reactor.callWhenRunning(main)
     reactor.run()

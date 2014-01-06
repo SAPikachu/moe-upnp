@@ -1,4 +1,4 @@
-https://github.com/sreichholf/python-coherence/archive/develop.zip
+https://github.com/SAPikachu/python-coherence/archive/develop.zip
 requests-oauthlib
 treq
 oauthlib
