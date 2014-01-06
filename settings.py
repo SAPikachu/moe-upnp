@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from __future__ import print_function, unicode_literals
 
 import os
@@ -43,3 +45,29 @@ def set(key, value):
 def get(key, default=None):
     _ensure_loaded()
     return _settings.get(key, default)
+
+
+def delete(key):
+    _ensure_loaded()
+    del _settings[key]
+    save()
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) == 1:
+        load()
+        print(json.dumps(_settings))
+    elif len(sys.argv) == 2:
+        print(get(sys.argv[1]))
+    else:
+        _, key, value = sys.argv
+        try:
+            value = int(value)
+        except ValueError:
+            value = value.strip('"')  # Allow setting numbers as string
+
+        if value == "--delete":
+            delete(key)
+        else:
+            set(key, value)
