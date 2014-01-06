@@ -94,7 +94,9 @@ class MoeFmPlaylistStore(AbstractBackendStore):
 
         root_item = Container(None, "Moe FM")
         self.set_root_item(root_item)
-        self.load_playlist(root_item)
+        playlist_item = Container(root_item, "Start listening")
+        root_item.add_child(playlist_item)
+        self.load_playlist(playlist_item)
 
     def load_playlist(self, parent_item):
         def got_response(resp_container):
