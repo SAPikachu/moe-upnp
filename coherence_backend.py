@@ -40,6 +40,12 @@ class MoeFmPlaylistItem(BackendItem):
             upnp_id = self.get_id()
             upnp_parent_id = self.parent.get_id()
             item = DIDLLite.AudioItem(upnp_id, upnp_parent_id, self.name)
+            item.name = self.name
+            item.title = self.title
+            item.artist = self.artist
+            item.album = self.album
+            item.albumArtURI = self.cover
+            item.duration = self.duration
 
             protocol = "http-get"
 
