@@ -26,18 +26,38 @@ class MoeFMProxyStream(ReverseProxyUriResource, log.Loggable):
         self.parent = parent
         ReverseProxyUriResource.__init__(self, uri.encode("utf-8"))
 
+    def log_playing(self):
+        if self.parent.store.last_played_item is self:
+            obj_id = self.parent.sub_id
+            d = api.moefm.get(
+                "/ajax/log?log_obj_type=sub&log_type=listen&obj_type=song&api=json", # noqa
+                {"obj_id": obj_id}
+            )
+            d.addCallback(lambda res: self.debug(
+                "Logged %s: %r", obj_id, res,
+            ))
+            d.addErrback(lambda res: self.warning(
+                "Unable to log %s: %r", obj_id, res,
+            ))
+
     def render(self, request):
         self.debug("render %r", self.parent.item_data)
-        self.parent.store.load_playlist()
+        self.parent.container.remove_child(self.parent)
+        self.parent.store.fill_playlist()
+        self.parent.store.last_played_item = self
+        reactor.callLater(self.parent.duration_seconds / 2, self.log_playing)
         return ReverseProxyUriResource.render(self, request)
 
 
 class MoeFmPlaylistItem(BackendItem):
     logCategory = "moefm"
 
-    def __init__(self, item_data):
+    def __init__(self, item_data, container):
         BackendItem.__init__(self)
         self.item_data = item_data
+        self.container = container
+        self.sub_id = item_data["sub_id"]
+
         track_number = None
         m = re.match(
             r"^song\.(\d+)\s+.*$",
@@ -55,6 +75,7 @@ class MoeFmPlaylistItem(BackendItem):
         self.album = _htmlparser.unescape(item_data["wiki_title"])
         self.cover = item_data["cover"]["large"]
         self.duration = item_data["stream_time"]
+        self.duration_seconds = int(item_data["stream_length"])
         if not re.match(r"^\d{2}:\d{2}:\d{2}(?:\.\d+)?", self.duration):
             self.duration = "0:" + self.duration  # Add hour part
 
@@ -108,6 +129,13 @@ class PlaylistBackendContainer(Container):
         Container.__init__(self, *args, **kwargs)
         self.sorting_method = lambda x, y: cmp(x.get_id(), y.get_id())
 
+    def remove_child(self, child, external_id=None, update=True):
+        self.children.remove(child)
+        # We'd like the item to be accessible even after removing from playlist
+        # self.store.remove_item(child)
+        if update:
+            self.update_id += 1
+
     def get_item(self):
         if self.item is None:
             self.item = DIDLLite.PlaylistContainer(
@@ -152,7 +180,13 @@ class MoeFmPlaylistStore(AbstractBackendStore):
         dummy = PlaylistBackendContainer(root_item, "Dummy")
         root_item.add_child(dummy)
 
-        self.load_playlist()
+        self.fill_playlist()
+
+    def fill_playlist(self):
+        current_count = self.playlist_container.get_child_count()
+        if current_count < settings.get("min_tracks_in_playlist", 120):
+            self.debug("Filling playlist...")
+            self.load_playlist().addCallback(lambda _: self.fill_playlist())
 
     def load_playlist(self):
         parent_item = self.playlist_container
@@ -166,7 +200,7 @@ class MoeFmPlaylistStore(AbstractBackendStore):
 
             items = []
             for item_data in resp["playlist"]:
-                item = MoeFmPlaylistItem(item_data)
+                item = MoeFmPlaylistItem(item_data, parent_item)
                 items.append(item)
                 parent_item.add_child(item)
 
@@ -180,7 +214,7 @@ class MoeFmPlaylistStore(AbstractBackendStore):
 
         d = api.moefm.get(
             "/listen/playlist?api=json",
-            {"perpage": settings.get("tracks_per_request", 2)}
+            {"perpage": settings.get("tracks_per_request", 30)},
         )
         d.addCallback(got_response)
         d.addErrback(got_error)
@@ -195,7 +229,6 @@ class MoeFmPlaylistStore(AbstractBackendStore):
             container = self.playlist_container
             value = (container.get_id(), container.get_update_id())
             self.info("update_completed %s %s", self.update_id, value)
-            self.warning(value)
             self.server.content_directory_server.set_variable(
                 0, "ContainerUpdateIDs", value,
             )
