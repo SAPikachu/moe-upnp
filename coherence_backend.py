@@ -38,10 +38,21 @@ class MoeFmPlaylistItem(BackendItem):
     def __init__(self, item_data):
         BackendItem.__init__(self)
         self.item_data = item_data
-        self.name = _htmlparser.unescape(item_data["title"])
-        self.title = _htmlparser.unescape(item_data["title"])
+        track_number = None
+        m = re.match(
+            r"^song\.(\d+)\s+.*$",
+            _htmlparser.unescape(item_data["title"]),
+            re.I,
+        )
+        if m:
+            track_number, = m.groups()
+
+        title = _htmlparser.unescape(item_data["sub_title"])
+        self.name = title
+        self.title = title
+        self.originalTrackNumber = track_number
         self.artist = _htmlparser.unescape(item_data["artist"])
-        self.album = item_data["sub_title"]
+        self.album = _htmlparser.unescape(item_data["wiki_title"])
         self.cover = item_data["cover"]["large"]
         self.duration = item_data["stream_time"]
         if not re.match(r"^\d{2}:\d{2}:\d{2}(?:\.\d+)?", self.duration):
@@ -62,6 +73,7 @@ class MoeFmPlaylistItem(BackendItem):
             item = DIDLLite.MusicTrack(upnp_id, upnp_parent_id, self.name)
             item.restricted = True
             item.name = self.name
+            item.originalTrackNumber = self.originalTrackNumber
             item.title = self.title
             item.artist = self.artist
             item.album = self.album
