@@ -28,6 +28,7 @@ class MoeFMProxyStream(ReverseProxyUriResource, log.Loggable):
 
     def render(self, request):
         self.debug("render %r", self.parent.item_data)
+        self.parent.store.load_playlist()
         return ReverseProxyUriResource.render(self, request)
 
 
@@ -57,6 +58,7 @@ class MoeFmPlaylistItem(BackendItem):
         if self.item is None:
             upnp_id = self.get_id()
             upnp_parent_id = self.parent.get_id()
+            self.debug("get_item %s %s %s", upnp_id, upnp_parent_id, self.name)
             item = DIDLLite.MusicTrack(upnp_id, upnp_parent_id, self.name)
             item.restricted = True
             item.name = self.name
@@ -108,6 +110,7 @@ class MoeFmPlaylistStore(AbstractBackendStore):
 
     def __init__(self, server, **kwargs):
         AbstractBackendStore.__init__(self, server, **kwargs)
+
         self.init_completed()
 
     def __repr__(self):
@@ -124,12 +127,21 @@ class MoeFmPlaylistStore(AbstractBackendStore):
             )
 
         root_item = Container(None, "Moe FM")
+        self.root_item = root_item
         self.set_root_item(root_item)
-        playlist_item = PlaylistBackendContainer(root_item, "Start listening")
-        root_item.add_child(playlist_item)
-        self.load_playlist(playlist_item)
+        self.playlist_container = PlaylistBackendContainer(
+            root_item, "Start listening",
+        )
+        root_item.add_child(self.playlist_container)
 
-    def load_playlist(self, parent_item):
+        dummy = PlaylistBackendContainer(root_item, "Dummy")
+        root_item.add_child(dummy)
+
+        self.load_playlist()
+
+    def load_playlist(self):
+        parent_item = self.playlist_container
+
         def got_response(resp_container):
             self.info("got playlist")
             resp = resp_container["response"]
@@ -143,6 +155,7 @@ class MoeFmPlaylistStore(AbstractBackendStore):
                 items.append(item)
                 parent_item.add_child(item)
 
+            self.update_completed()
             return items
 
         def got_error(error):
@@ -158,6 +171,23 @@ class MoeFmPlaylistStore(AbstractBackendStore):
         d.addErrback(got_error)
         return d
 
+    def update_completed(self):
+        self.update_id += 1
+        try:
+            self.server.content_directory_server.set_variable(
+                0, "SystemUpdateID", self.update_id,
+            )
+            container = self.playlist_container
+            value = (container.get_id(), container.get_update_id())
+            self.info("update_completed %s %s", self.update_id, value)
+            self.warning(value)
+            self.server.content_directory_server.set_variable(
+                0, "ContainerUpdateIDs", value,
+            )
+        except Exception as e:
+            self.warning("%r", e)
+
+
 if __name__ == '__main__':
     from twisted.internet import reactor
 
@@ -166,7 +196,37 @@ if __name__ == '__main__':
         Plugins().set("MoeFmPlaylistStore", MoeFmPlaylistStore)
         Coherence({
             "logging": {
-                "level": "warn",
+                "subsystem": [{
+                    "name": "*",
+                    "level": "warning",
+                }, {
+                    "name": "msearch",
+                    "level": "warning",
+                }, {
+                    "name": "ssdp",
+                    "level": "warning",
+                }, {
+                    "name": "service_client",
+                    "level": "warning",
+                }, {
+                    "name": "mediaserver",
+                    "level": "warning",
+                }, {
+                    "name": "event_subscription_server",
+                    "level": "info",
+                }, {
+                    "name": "event_server",
+                    "level": "info",
+                }, {
+                    "name": "event",
+                    "level": "info",
+                }, {
+                    "name": "event_protocol",
+                    "level": "info",
+                }, {
+                    "name": "notification_protocol",
+                    "level": "info",
+                }, ],
             },
             "plugin": [{"backend": "MoeFmPlaylistStore"}]
         })
