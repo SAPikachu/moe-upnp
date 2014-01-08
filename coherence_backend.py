@@ -92,6 +92,10 @@ class MoeFmPlaylistItem(BackendItem):
 
 
 class PlaylistBackendContainer(Container):
+    def __init__(self, *args, **kwargs):
+        Container.__init__(self, *args, **kwargs)
+        self.sorting_method = lambda x, y: cmp(x.get_id(), y.get_id())
+
     def get_item(self):
         if self.item is None:
             self.item = DIDLLite.PlaylistContainer(
@@ -118,13 +122,12 @@ class MoeFmPlaylistStore(AbstractBackendStore):
 
     def upnp_init(self):
         self.current_connection_id = None
-        if self.server:
-            self.server.connection_manager_server.set_variable(
-                0,
-                "SourceProtocolInfo",
-                ["http-get:*:audio/mpeg:*"],
-                default=True,
-            )
+        self.server.connection_manager_server.set_variable(
+            0,
+            "SourceProtocolInfo",
+            ["http-get:*:audio/mpeg:*"],
+            default=True,
+        )
 
         root_item = Container(None, "Moe FM")
         self.root_item = root_item
