@@ -130,11 +130,15 @@ class PlaylistBackendContainer(Container):
         self.sorting_method = lambda x, y: cmp(x.get_id(), y.get_id())
 
     def remove_child(self, child, external_id=None, update=True):
-        self.children.remove(child)
-        # We'd like the item to be accessible even after removing from playlist
-        # self.store.remove_item(child)
-        if update:
-            self.update_id += 1
+        try:
+            self.children.remove(child)
+            # We'd like the item to be accessible even after removing it
+            # self.store.remove_item(child)
+        except ValueError:
+            pass
+        else:
+            if update:
+                self.update_id += 1
 
     def get_item(self):
         if self.item is None:
