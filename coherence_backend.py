@@ -242,42 +242,11 @@ if __name__ == '__main__':
     def main():
         from coherence.base import Coherence, Plugins
         Plugins().set("MoeFmPlaylistStore", MoeFmPlaylistStore)
-        Coherence({
-            "logging": {
-                "subsystem": [{
-                    "name": "*",
-                    "level": "warning",
-                }, {
-                    "name": "msearch",
-                    "level": "warning",
-                }, {
-                    "name": "ssdp",
-                    "level": "warning",
-                }, {
-                    "name": "service_client",
-                    "level": "warning",
-                }, {
-                    "name": "mediaserver",
-                    "level": "warning",
-                }, {
-                    "name": "event_subscription_server",
-                    "level": "info",
-                }, {
-                    "name": "event_server",
-                    "level": "info",
-                }, {
-                    "name": "event",
-                    "level": "info",
-                }, {
-                    "name": "event_protocol",
-                    "level": "info",
-                }, {
-                    "name": "notification_protocol",
-                    "level": "info",
-                }, ],
-            },
+        conf = dict(settings.get("coherence_config", {}))
+        conf.update({
             "plugin": [{"backend": "MoeFmPlaylistStore"}]
         })
+        Coherence(conf)
 
     reactor.callWhenRunning(main)
     reactor.run()
