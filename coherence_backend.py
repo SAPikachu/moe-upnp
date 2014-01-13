@@ -57,6 +57,7 @@ class MoeFmPlaylistItem(BackendItem):
         self.item_data = item_data
         self.container = container
         self.sub_id = item_data["sub_id"]
+        self.storage_id = "%s,track,%s" % (container.get_id(), self.sub_id)
 
         track_number = None
         m = re.match(
@@ -163,6 +164,24 @@ class MoeFmPlaylistStore(AbstractBackendStore):
 
     def __repr__(self):
         return self.__class__.__name__
+
+    def append_item(self, item, storage_id=None):
+        if storage_id is None:
+            storage_id = item.get_id()
+
+        if storage_id is None:
+            storage_id = self.getnextID()
+
+        storage_id = str(storage_id)
+        return super(MoeFmPlaylistStore, self).append_item(item, storage_id)
+
+    def get_by_id(self, id):
+        self.warning("get_by_id: %r", id)
+        if isinstance(id, basestring):
+            id = id.split("@", 1)
+            id = id[0].split(".")[0]
+
+        return self.store.get(str(id))
 
     def upnp_init(self):
         self.current_connection_id = None
