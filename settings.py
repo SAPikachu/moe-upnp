@@ -36,20 +36,46 @@ def save():
         json.dump(_settings, f, indent=4)
 
 
+def _resolve(key, create):
+    container = _settings
+    key_parts = key.split(".")
+    for part in key_parts[:-1]:
+        if part not in container:
+            if not create:
+                return None, None
+
+            container[part] = {}
+
+        container = container[part]
+        if not isinstance(container, dict):
+            raise KeyError("Invalid container: " + part)
+
+    return container, key_parts[-1]
+
+
 def set(key, value):
     _ensure_loaded()
-    _settings[key] = value
+    container, last_key = _resolve(key, True)
+    container[last_key] = value
     save()
 
 
 def get(key, default=None):
     _ensure_loaded()
-    return _settings.get(key, default)
+    container, last_key = _resolve(key, False)
+    if container is None:
+        return default
+
+    return container.get(last_key, default)
 
 
 def delete(key):
     _ensure_loaded()
-    del _settings[key]
+    container, last_key = _resolve(key, False)
+    if container is None or last_key not in container:
+        return
+
+    del container[last_key]
     save()
 
 
