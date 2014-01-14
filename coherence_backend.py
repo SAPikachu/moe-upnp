@@ -58,7 +58,7 @@ class MoeFmPlaylistItem(BackendItem):
         self.item_data = item_data
         self.container = container
         self.sub_id = item_data["sub_id"]
-        self.storage_id = "%s,track,%s" % (container.get_id(), self.sub_id)
+        self.storage_id = "track-%s$%s" % (self.sub_id, container.get_id())
         self.__class__.next_sn += 1
         self.sort_key = self.__class__.next_sn
 
