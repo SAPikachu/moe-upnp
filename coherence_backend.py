@@ -51,6 +51,7 @@ class MoeFMProxyStream(ReverseProxyUriResource, log.Loggable):
 
 class MoeFmPlaylistItem(BackendItem):
     logCategory = "moefm"
+    next_sn = 0
 
     def __init__(self, item_data, container):
         BackendItem.__init__(self)
@@ -58,6 +59,8 @@ class MoeFmPlaylistItem(BackendItem):
         self.container = container
         self.sub_id = item_data["sub_id"]
         self.storage_id = "%s,track,%s" % (container.get_id(), self.sub_id)
+        self.__class__.next_sn += 1
+        self.sort_key = self.__class__.next_sn
 
         track_number = None
         m = re.match(
@@ -128,7 +131,7 @@ class MoeFmPlaylistItem(BackendItem):
 class PlaylistBackendContainer(Container):
     def __init__(self, *args, **kwargs):
         Container.__init__(self, *args, **kwargs)
-        self.sorting_method = lambda x, y: cmp(x.get_id(), y.get_id())
+        self.sorting_method = lambda x, y: cmp(x.sort_key, y.sort_key)
 
     def remove_child(self, child, external_id=None, update=True):
         try:
