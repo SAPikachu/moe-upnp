@@ -176,8 +176,12 @@ class MoeFmTrackContainer(Container):
             return
 
         items = []
+        existing_ids = set(x.sub_id for x in self.children)
         for item_data in resp["playlist"]:
             item = MoeFmTrack(item_data, self)
+            if item.sub_id in existing_ids:
+                continue
+
             items.append(item)
             self.add_child(item)
 
@@ -316,8 +320,11 @@ class MoeFmPlaylistStore(AbstractBackendStore):
         self.set_root_item(root_item)
         root_item.add_child(MoeFmRandomPlaylist(self, root_item))
 
-        dummy = Container(root_item, "Dummy")
-        root_item.add_child(dummy)
+        fav_tracks = MoeFmMultiPageTrackContainer(
+            self, root_item, "Favorite tracks", api_params={"fav": "song"}
+        )
+        fav_tracks.storage_id = "fav-tracks"
+        root_item.add_child(fav_tracks)
 
     def on_update_completed(self, container):
         self.update_id += 1
