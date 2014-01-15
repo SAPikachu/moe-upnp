@@ -131,6 +131,7 @@ class MoeFmTrack(BackendItem):
 class MoeFmTrackContainer(Container):
     logCategory = "moefm_track_container"
     ContainerClass = DIDLLite.PlaylistContainer
+    preferred_id = None
 
     def __init__(self, store, parent, title, api_params=None):
         super(MoeFmTrackContainer, self).__init__(parent, title)
@@ -138,6 +139,10 @@ class MoeFmTrackContainer(Container):
         self.store = store
         self.api_params = api_params if api_params is not None else {}
         self.loaded = False
+        if self.preferred_id:
+            self.storage_id = self.preferred_id
+            if store.get_by_id(self.storage_id):
+                self.storage_id += "$" + parent.get_id()
 
     def get_item(self):
         if not self.loaded:
@@ -198,8 +203,38 @@ class MoeFmTrackContainer(Container):
         pass
 
 
-class MoeFmRandomPlaylist(MoeFmTrackContainer):
-    storage_id = "magic"
+class MoeFmMultiPageTrackContainer(MoeFmTrackContainer):
+    def __init__(self, *args, **kwargs):
+        super(MoeFmMultiPageTrackContainer, self).__init__(*args, **kwargs)
+        self.current_page = 1
+
+    @property
+    def should_load_next_page(self):
+        return True
+
+    def load_tracks(self):
+        def on_completed(items):
+            if items:
+                self.current_page += 1
+
+            if items and self.should_load_next_page:
+                return self.load_tracks().addCallback(
+                    lambda x: itertools.chain(x, items)
+                )
+            else:
+                return items
+
+        d = super(MoeFmMultiPageTrackContainer, self).load_tracks()
+        return d.addCallback(on_completed)
+
+    def get_api_params(self):
+        params = super(MoeFmMultiPageTrackContainer, self).get_api_params()
+        params["page"] = self.current_page
+        return params
+
+
+class MoeFmRandomPlaylist(MoeFmMultiPageTrackContainer):
+    preferred_id = "magic"
 
     def __init__(self, store, parent):
         super(MoeFmRandomPlaylist, self).__init__(store, parent, "Magic")
@@ -221,25 +256,18 @@ class MoeFmRandomPlaylist(MoeFmTrackContainer):
         return current_count < settings.get("min_tracks_in_playlist", 120)
 
     @property
+    def should_load_next_page(self):
+        return self.need_more_tracks
+
+    @property
     def loaded(self):
         return not self.need_more_tracks
 
     loaded = loaded.setter(lambda self, value: None)
 
-    def load_tracks(self):
-        def on_completed(items):
-            if self.need_more_tracks:
-                return self.load_tracks().addCallback(
-                    lambda x: itertools.chain(x, items)
-                )
-            else:
-                return items
-
-        d = super(MoeFmRandomPlaylist, self).load_tracks()
-        return d.addCallback(on_completed)
-
     def on_item_play(self, item):
         self.remove_child(item)
+        self.on_update_completed()
 
 
 class MoeFmPlaylistStore(AbstractBackendStore):
