@@ -1,6 +1,7 @@
 from __future__ import print_function, unicode_literals
 
 import re
+import itertools
 from HTMLParser import HTMLParser
 
 from coherence import log
@@ -19,7 +20,7 @@ import settings
 _htmlparser = HTMLParser()
 
 
-class MoeFMProxyStream(ReverseProxyUriResource, log.Loggable):
+class MoeFmProxyStream(ReverseProxyUriResource, log.Loggable):
     logCategory = 'moefm_stream'
 
     def __init__(self, uri, parent):
@@ -42,14 +43,13 @@ class MoeFMProxyStream(ReverseProxyUriResource, log.Loggable):
 
     def render(self, request):
         self.debug("render %r", self.parent.item_data)
-        self.parent.container.remove_child(self.parent)
-        self.parent.store.fill_playlist()
+        self.parent.container.on_item_play(self.parent)
         self.parent.store.last_played_item = self
         reactor.callLater(self.parent.duration_seconds / 2, self.log_playing)
         return ReverseProxyUriResource.render(self, request)
 
 
-class MoeFmPlaylistItem(BackendItem):
+class MoeFmTrack(BackendItem):
     logCategory = "moefm"
     next_sn = 0
 
@@ -108,7 +108,7 @@ class MoeFmPlaylistItem(BackendItem):
             proxied_url = "%s%s" % (self.store.urlbase, self.get_id())
             proxied_url = proxied_url.encode("utf-8")
             self.url = proxied_url
-            self.location = MoeFMProxyStream(self.item_data["url"], self)
+            self.location = MoeFmProxyStream(self.item_data["url"], self)
 
             protocol = "http-get"
 
@@ -128,10 +128,81 @@ class MoeFmPlaylistItem(BackendItem):
         return self.url
 
 
-class PlaylistBackendContainer(Container):
-    def __init__(self, *args, **kwargs):
-        Container.__init__(self, *args, **kwargs)
+class MoeFmTrackContainer(Container):
+    logCategory = "moefm_track_container"
+    ContainerClass = DIDLLite.PlaylistContainer
+
+    def __init__(self, store, parent, title, api_params=None):
+        super(MoeFmTrackContainer, self).__init__(parent, title)
         self.sorting_method = lambda x, y: cmp(x.sort_key, y.sort_key)
+        self.store = store
+        self.api_params = api_params if api_params is not None else {}
+        self.loaded = False
+
+    def get_item(self):
+        if not self.loaded:
+            return self.load_tracks().addCallback(lambda _: self.get_item())
+
+        if self.item is None:
+            self.item = self.ContainerClass(
+                self.storage_id, self.parent_id, self.name
+            )
+
+        self.item.childCount = self.get_child_count()
+        return self.item
+
+    def get_children(self, *args, **kwargs):
+        if not self.loaded:
+            return self.load_tracks().addCallback(
+                lambda _: self.get_children(*args, **kwargs)
+            )
+
+        return super(MoeFmTrackContainer, self).get_children(*args, **kwargs)
+
+    def get_api_params(self):
+        return self.api_params
+
+    def on_got_response(self, resp_container):
+        self.info("Got response")
+        resp = resp_container["response"]
+        self.debug("Information: %r", resp["information"])
+        if resp["information"]["has_error"]:
+            self.error("Got error response: %s" % resp)
+            return
+
+        items = []
+        for item_data in resp["playlist"]:
+            item = MoeFmTrack(item_data, self)
+            items.append(item)
+            self.add_child(item)
+
+        self.on_update_completed()
+        self.loaded = True
+        return items
+
+    def on_got_error(self, error):
+        self.warning("Unable to retrieve tracks: %s", error)
+        return error
+
+    def load_tracks(self):
+        params = {"perpage": settings.get("tracks_per_request", 30)}
+        params.update(self.get_api_params())
+        d = api.moefm.get("/listen/playlist?api=json", params)
+        return d.addCallbacks(self.on_got_response, self.on_got_error)
+
+    def on_update_completed(self):
+        self.update_id += 1
+        self.store.on_update_completed(self)
+
+    def on_item_play(self, item):
+        pass
+
+
+class MoeFmRandomPlaylist(MoeFmTrackContainer):
+    storage_id = "magic"
+
+    def __init__(self, store, parent):
+        super(MoeFmRandomPlaylist, self).__init__(store, parent, "Magic")
 
     def remove_child(self, child, external_id=None, update=True):
         try:
@@ -144,14 +215,31 @@ class PlaylistBackendContainer(Container):
             if update:
                 self.update_id += 1
 
-    def get_item(self):
-        if self.item is None:
-            self.item = DIDLLite.PlaylistContainer(
-                self.storage_id, self.parent_id, self.name
-            )
+    @property
+    def need_more_tracks(self):
+        current_count = self.get_child_count()
+        return current_count < settings.get("min_tracks_in_playlist", 120)
 
-        self.item.childCount = self.get_child_count()
-        return self.item
+    @property
+    def loaded(self):
+        return not self.need_more_tracks
+
+    loaded = loaded.setter(lambda self, value: None)
+
+    def load_tracks(self):
+        def on_completed(items):
+            if self.need_more_tracks:
+                return self.load_tracks().addCallback(
+                    lambda x: itertools.chain(x, items)
+                )
+            else:
+                return items
+
+        d = super(MoeFmRandomPlaylist, self).load_tracks()
+        return d.addCallback(on_completed)
+
+    def on_item_play(self, item):
+        self.remove_child(item)
 
 
 class MoeFmPlaylistStore(AbstractBackendStore):
@@ -179,7 +267,7 @@ class MoeFmPlaylistStore(AbstractBackendStore):
         return super(MoeFmPlaylistStore, self).append_item(item, storage_id)
 
     def get_by_id(self, id):
-        self.warning("get_by_id: %r", id)
+        self.info("get_by_id: %r", id)
         if isinstance(id, basestring):
             id = id.split("@", 1)
             id = id[0].split(".")[0]
@@ -198,63 +286,19 @@ class MoeFmPlaylistStore(AbstractBackendStore):
         root_item = Container(None, "Moe FM")
         self.root_item = root_item
         self.set_root_item(root_item)
-        self.playlist_container = PlaylistBackendContainer(
-            root_item, "Start listening",
-        )
-        root_item.add_child(self.playlist_container)
+        root_item.add_child(MoeFmRandomPlaylist(self, root_item))
 
-        dummy = PlaylistBackendContainer(root_item, "Dummy")
+        dummy = Container(root_item, "Dummy")
         root_item.add_child(dummy)
 
-        self.fill_playlist()
-
-    def fill_playlist(self):
-        current_count = self.playlist_container.get_child_count()
-        if current_count < settings.get("min_tracks_in_playlist", 120):
-            self.debug("Filling playlist...")
-            self.load_playlist().addCallback(lambda _: self.fill_playlist())
-
-    def load_playlist(self):
-        parent_item = self.playlist_container
-
-        def got_response(resp_container):
-            self.info("got playlist")
-            resp = resp_container["response"]
-            if resp["information"]["has_error"]:
-                self.error("Got error response: %s" % resp)
-                return
-
-            items = []
-            for item_data in resp["playlist"]:
-                item = MoeFmPlaylistItem(item_data, parent_item)
-                items.append(item)
-                parent_item.add_child(item)
-
-            self.update_completed()
-            return items
-
-        def got_error(error):
-            self.warning("Unable to retrieve playlist")
-            print("Error: %s" % error)
-            return None
-
-        d = api.moefm.get(
-            "/listen/playlist?api=json",
-            {"perpage": settings.get("tracks_per_request", 30)},
-        )
-        d.addCallback(got_response)
-        d.addErrback(got_error)
-        return d
-
-    def update_completed(self):
+    def on_update_completed(self, container):
         self.update_id += 1
         try:
             self.server.content_directory_server.set_variable(
                 0, "SystemUpdateID", self.update_id,
             )
-            container = self.playlist_container
             value = (container.get_id(), container.get_update_id())
-            self.info("update_completed %s %s", self.update_id, value)
+            self.info("on_update_completed %s %s", self.update_id, value)
             self.server.content_directory_server.set_variable(
                 0, "ContainerUpdateIDs", value,
             )
